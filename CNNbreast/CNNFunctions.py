@@ -1,4 +1,4 @@
-# Functions for breast cancer classification using CNN
+﻿# Functions for breast cancer classification using CNN
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -22,9 +22,10 @@ from cntk.logging import *
 if 'TEST_DEVICE' in os.environ:
     if os.environ['TEST_DEVICE'] == 'cpu':
         C.device.set_default_device(C.device.cpu())
+        print('CPU!')
     else:
         C.device.set_default_device(C.device.gpu(0))
-
+        print('GPU!')
 
 #####################################################################################################################################################
 # Get average pixels of the images
@@ -89,10 +90,10 @@ def create_reader(map_file, mean_file, image_width, image_height, num_channels, 
 
     # transformation pipeline for the features has jitter/crop only when training
     transforms = []
-    if train:
-        transforms += [
-            xforms.crop(crop_type='randomside', side_ratio=0.8) # train uses data augmentation (translation only)
-        ]
+   # if train:
+   #     transforms += [
+   #         xforms.crop(crop_type='randomside', side_ratio=0.8) # train uses data augmentation (translation only)
+   #     ]
     transforms += [
         xforms.scale(width=image_width, height=image_height, channels=num_channels, interpolations='linear'),
         xforms.mean(mean_file)
@@ -148,6 +149,7 @@ def create_basic_model_with_batch_normalization(input, out_dims):
                 MaxPooling((3,3), strides=(2,2))
             ]),
             Dense(64, init=glorot_uniform()),
+            Dropout(0.25),
             BatchNormalization(map_rank=1),
             Dense(out_dims, init=glorot_uniform(), activation=None)
         ])
@@ -267,33 +269,28 @@ def train_and_evaluate(reader_train, reader_test, image_width, image_height, num
     plt.ylabel('Loss')
     plt.title('Minibatch run vs. Training loss ')
 
-    plt.show()
-
     plt.subplot(212)
     plt.plot(plot_data["batchindex"], plot_data["avg_error"], 'r--')
     plt.xlabel('Minibatch number')
     plt.ylabel('Label Prediction Error')
     plt.title('Minibatch run vs. Label Prediction Error ')
+    plt.tight_layout()
     plt.show()
     
     return softmax(z)
 
-
 import PIL
 
-def eval(pred_op, image_path):
+def eval(pred_op, image_path, image_mean):
     label_lookup = ["healty tissue", "metastases"]
-    image_mean   = 133.0
     image_data   = np.array(PIL.Image.open(image_path), dtype=np.float32)
     
     if image_data.shape[0] != 256 or image_data.shape[1] != 256:
         image_data = imresize(image_data, (256, 256))
     
     image_data = image_data.astype(dtype = np.float32)
-
-    image_data  -= image_mean
     image_data   = np.ascontiguousarray(np.transpose(image_data, (2, 0, 1)))
-    
+    image_data  -= image_mean
     result       = np.squeeze(pred_op.eval({pred_op.arguments[0]:[image_data]}))
     
     # Return top 3 results:
