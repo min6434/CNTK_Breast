@@ -77,7 +77,8 @@ def changeCvediaToCNTKmap(inputFile, outputFile, dataPath):
         for line in open(inputFile, 'r'):
             line = line.replace(' ', '\t') # CNTK paser column using tab
             line = line.replace('/', '\\') # linux path uses / and winows uses \
-            line = line.replace('.\\SygDNXzjqQxPAWC2A7Pes3L2m9EBY2dJ', dataPath)
+            #line = line.replace('.\\SygDNXzjqQxPAWC2A7Pes3L2m9EBY2dJ', 'dataPath')
+            line = line.replace('.\\', '.\\..\\..\\data\\')
             CNTKFile.write(line)
 
 
@@ -111,7 +112,8 @@ def create_basic_model_terse(input, out_dims):
     with default_options(activation=relu):
         model = Sequential([
             For(range(3), lambda i: [
-                Convolution((5,5), [32,32,64][i], init=glorot_uniform(), pad=True),
+                Convolution((3,3), [16,32,64][i], init=glorot_uniform(), pad=True),
+                Convolution((3,3), [16,32,64][i], init=glorot_uniform(), pad=True),
                 MaxPooling((3,3), strides=(2,2))
             ]),
             Dense(64, init=glorot_uniform()),
@@ -144,12 +146,11 @@ def create_basic_model_with_batch_normalization(input, out_dims):
     with default_options(activation=relu):
         model = Sequential([
             For(range(3), lambda i: [
-                Convolution((5,5), [32,32,64][i], init=glorot_uniform(), pad=True),
+                Convolution((7,7), [32,32,64][i], init=glorot_uniform(), pad=True),
                 BatchNormalization(map_rank=1),
                 MaxPooling((3,3), strides=(2,2))
             ]),
             Dense(64, init=glorot_uniform()),
-            Dropout(0.25),
             BatchNormalization(map_rank=1),
             Dense(out_dims, init=glorot_uniform(), activation=None)
         ])
@@ -157,6 +158,73 @@ def create_basic_model_with_batch_normalization(input, out_dims):
     return model(input)
 
 
+
+
+from cntk.ops import combine, times, element_times, AVG_POOLING
+
+
+#####################################################################################################################################################
+
+def convolution_bn(input, filter_size, num_filters, strides=(1,1), init=he_normal(), activation=relu):
+    if activation is None:
+        activation = lambda x: x
+        
+    r = Convolution(filter_size, num_filters, strides=strides, init=init, activation=None, pad=True, bias=False)(input)
+    r = BatchNormalization(map_rank=1)(r)
+    r = activation(r)
+    
+    return r
+
+
+#####################################################################################################################################################
+
+def resnet_basic(input, num_filters):
+    c1 = convolution_bn(input, (3,3), num_filters)
+    c2 = convolution_bn(c1, (3,3), num_filters, activation=None)
+    p  = c2 + input
+    return relu(p)
+
+
+#####################################################################################################################################################
+
+def resnet_basic_inc(input, num_filters):
+    c1 = convolution_bn(input, (3,3), num_filters, strides=(2,2))
+    c2 = convolution_bn(c1, (3,3), num_filters, activation=None)
+
+    s = convolution_bn(input, (1,1), num_filters, strides=(2,2), activation=None)
+    
+    p = c2 + s
+    return relu(p)
+
+
+#####################################################################################################################################################
+
+def resnet_basic_stack(input, num_filters, num_stack):
+    assert (num_stack > 0)
+    
+    r = input
+    for _ in range(num_stack):
+        r = resnet_basic(r, num_filters)
+    return r
+
+
+#####################################################################################################################################################
+
+def create_resnet_model(input, out_dims):
+    conv = convolution_bn(input, (3,3), 16)
+    r1_1 = resnet_basic_stack(conv, 16, 3)
+
+    r2_1 = resnet_basic_inc(r1_1, 32)
+    r2_2 = resnet_basic_stack(r2_1, 32, 2)
+
+    r3_1 = resnet_basic_inc(r2_2, 64)
+    r3_2 = resnet_basic_stack(r3_1, 64, 2)
+
+    # Global average pooling
+    pool = AveragePooling(filter_shape=(8,8), strides=(1,1))(r3_2)    
+    net = Dense(out_dims, init=he_normal(), activation=None)(pool)
+    
+    return net
 
 #####################################################################################################################################################
 def train_and_evaluate(reader_train, reader_test, image_width, image_height, num_channels, num_classes, max_epochs, model_func):
@@ -180,7 +248,7 @@ def train_and_evaluate(reader_train, reader_test, image_width, image_height, num
     pe = classification_error(z, label_var)
 
     # training config
-    epoch_size     =  461
+    epoch_size     =  4999
     minibatch_size = 64
 
     # Set training parameters
@@ -225,7 +293,7 @@ def train_and_evaluate(reader_train, reader_test, image_width, image_height, num
     #
     # Evaluation action
     #
-    epoch_size     = 64
+    epoch_size     = 1151
     minibatch_size = 64
 
     # process minibatches and evaluate the model
@@ -279,8 +347,9 @@ def train_and_evaluate(reader_train, reader_test, image_width, image_height, num
     
     return softmax(z)
 
-import PIL
 
+import PIL
+#####################################################################################################################################################
 def eval(pred_op, image_path, image_mean):
     label_lookup = ["healty tissue", "metastases"]
     image_data   = np.array(PIL.Image.open(image_path), dtype=np.float32)

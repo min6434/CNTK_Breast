@@ -20,27 +20,29 @@ DataPath = os.getcwd()
 for i in range(2):
     DataPath = os.path.abspath(os.path.join(DataPath, os.pardir))
 DataPath = os.path.join(DataPath,'data')
-DataPath = os.path.join(DataPath,Job_ID)
+#DataPath = os.path.join(DataPath,Job_ID)
 
 # Change map text files into the CNTK format
-#changeCvediaToCNTKmap(os.path.join(DataPath,'train.txt'), os.path.join(DataPath,'train_cntk.txt'), DataPath)
-#changeCvediaToCNTKmap(os.path.join(DataPath,'validate.txt'), os.path.join(DataPath,'validate_cntk.txt'), DataPath)
+print("converting cvedia map to cntk map...")
+changeCvediaToCNTKmap(os.path.join(DataPath,'train_total.txt'), os.path.join(DataPath,'train_total_cntk.txt'), DataPath)
+changeCvediaToCNTKmap(os.path.join(DataPath,'test_total.txt'), os.path.join(DataPath,'test_total_cntk.txt'), DataPath)
 
 # Calculate average pixel data and put them into the XML for CNTK
-meanImg = saveMean(os.path.join(DataPath,'train_cntk.txt'))
-#saveMeanXML(os.path.join(DataPath,'breast_mean.xml'), meanImg, ImagSize)
+print("calculating an average image...")
+meanImg = saveMean(os.path.join(DataPath,'train_total_cntk.txt'))
+saveMeanXML(os.path.join(DataPath,'breast_mean.xml'), meanImg, ImagSize)
 
 # Create image readers
-reader_train = create_reader(os.path.join(DataPath,'train_cntk.txt'), os.path.join(DataPath,'breast_mean.xml'), image_width, image_height, num_channels, num_classes, True)
-reader_test  = create_reader(os.path.join(DataPath,'validate_cntk.txt'), os.path.join(DataPath,'breast_mean.xml'), image_width, image_height, num_channels, num_classes, False)
+reader_train = create_reader(os.path.join(DataPath,'train_total_cntk.txt'), os.path.join(DataPath,'breast_mean.xml'), image_width, image_height, num_channels, num_classes, True)
+reader_test  = create_reader(os.path.join(DataPath,'test_total_cntk.txt'), os.path.join(DataPath,'breast_mean.xml'), image_width, image_height, num_channels, num_classes, False)
 
-pred_basic_model_bn = train_and_evaluate(reader_train, reader_test, image_width, image_height, num_channels, num_classes, max_epochs=100,\
+pred_basic_model_bn = train_and_evaluate(reader_train, reader_test, image_width, image_height, num_channels, num_classes, max_epochs=50,\
     model_func=create_basic_model_with_batch_normalization)
 
 label_lookup = ["healty tissue", "metastases"]
 nTotal = 0
 nFalse = 0
-for i, line in enumerate(open("""D:\\Source\\Repos\\CNTK_sources\\CNTK_Breast\\SygDNXzjqQxPAWC2A7Pes3L2m9EBY2dJ\\validate_cntk.txt""", 'r')):
+for i, line in enumerate(open(os.path.join(DataPath,'test_total_cntk.txt'), 'r')):
     imgFile, label = line.split('\t')
     result = eval(pred_basic_model_bn, imgFile, meanImg)
     nTotal += 1
