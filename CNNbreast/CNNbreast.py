@@ -1,9 +1,5 @@
 ﻿# Import the relevant components
 from __future__ import print_function
-#import os
-#import numpy as np
-import matplotlib.pyplot as plt
-import math
 
 from CNNFunctions import *
 
@@ -24,8 +20,8 @@ DataPath = os.path.join(DataPath,'data')
 
 # Change map text files into the CNTK format
 print("converting cvedia map to cntk map...")
-changeCvediaToCNTKmap(os.path.join(DataPath,'train_total.txt'), os.path.join(DataPath,'train_total_cntk.txt'), DataPath)
-changeCvediaToCNTKmap(os.path.join(DataPath,'test_total.txt'), os.path.join(DataPath,'test_total_cntk.txt'), DataPath)
+nTrain = changeCvediaToCNTKmap(os.path.join(DataPath,'train.txt'), os.path.join(DataPath,'train_total_cntk.txt'), DataPath)
+nTest = changeCvediaToCNTKmap(os.path.join(DataPath,'test.txt'), os.path.join(DataPath,'test_total_cntk.txt'), DataPath)
 
 # Calculate average pixel data and put them into the XML for CNTK
 print("calculating an average image...")
@@ -36,8 +32,8 @@ saveMeanXML(os.path.join(DataPath,'breast_mean.xml'), meanImg, ImagSize)
 reader_train = create_reader(os.path.join(DataPath,'train_total_cntk.txt'), os.path.join(DataPath,'breast_mean.xml'), image_width, image_height, num_channels, num_classes, True)
 reader_test  = create_reader(os.path.join(DataPath,'test_total_cntk.txt'), os.path.join(DataPath,'breast_mean.xml'), image_width, image_height, num_channels, num_classes, False)
 
-pred_basic_model_bn = train_and_evaluate(reader_train, reader_test, image_width, image_height, num_channels, num_classes, max_epochs=50,\
-    model_func=create_basic_model_with_batch_normalization)
+pred_basic_model_bn = train_and_evaluate(reader_train, reader_test, image_width, image_height, num_channels, num_classes,\
+    nTrain, nTest, max_epochs=20, model_func=create_basic_model_with_batch_normalization)
 
 label_lookup = ["healty tissue", "metastases"]
 nTotal = 0

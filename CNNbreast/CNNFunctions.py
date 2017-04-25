@@ -72,14 +72,16 @@ def saveMeanXML(fname, data, imgSize):
 #####################################################################################################################################################
 # Change cvedia format map file into the CNTK format map file
 def changeCvediaToCNTKmap(inputFile, outputFile, dataPath):
+    NumSamples = 0
     "Change cvedia format map file into the CNTK format map file"
     with open(outputFile, 'w') as CNTKFile: 
         for line in open(inputFile, 'r'):
+            NumSamples += 1
             line = line.replace(' ', '\t') # CNTK paser column using tab
-            line = line.replace('/', '\\') # linux path uses / and winows uses \
-            #line = line.replace('.\\SygDNXzjqQxPAWC2A7Pes3L2m9EBY2dJ', 'dataPath')
+            line = line.replace('/', '\\') # linux path uses / and winows uses 
             line = line.replace('.\\', '.\\..\\..\\data\\')
             CNTKFile.write(line)
+    return NumSamples
 
 
 #####################################################################################################################################################
@@ -217,8 +219,10 @@ def create_resnet_model(input, out_dims):
     r2_1 = resnet_basic_inc(r1_1, 32)
     r2_2 = resnet_basic_stack(r2_1, 32, 2)
 
-    r3_1 = resnet_basic_inc(r2_2, 64)
-    r3_2 = resnet_basic_stack(r3_1, 64, 2)
+    #r3_1 = resnet_basic_inc(r2_2, 64)
+    #r3_2 = resnet_basic_stack(r3_1, 64, 2)
+    r3_1 = resnet_basic_inc(r2_2, 32)
+    r3_2 = resnet_basic_stack(r3_1, 32, 2)
 
     # Global average pooling
     pool = AveragePooling(filter_shape=(8,8), strides=(1,1))(r3_2)    
@@ -227,7 +231,7 @@ def create_resnet_model(input, out_dims):
     return net
 
 #####################################################################################################################################################
-def train_and_evaluate(reader_train, reader_test, image_width, image_height, num_channels, num_classes, max_epochs, model_func):
+def train_and_evaluate(reader_train, reader_test, image_width, image_height, num_channels, num_classes, num_train, num_test, max_epochs, model_func):
     # Input variables denoting the features and label data
     input_var = C.input((num_channels, image_height, image_width))
     label_var = C.input((num_classes))
@@ -248,7 +252,7 @@ def train_and_evaluate(reader_train, reader_test, image_width, image_height, num
     pe = classification_error(z, label_var)
 
     # training config
-    epoch_size     =  4999
+    epoch_size     =  num_train
     minibatch_size = 64
 
     # Set training parameters
@@ -293,7 +297,7 @@ def train_and_evaluate(reader_train, reader_test, image_width, image_height, num
     #
     # Evaluation action
     #
-    epoch_size     = 1151
+    epoch_size     = num_test
     minibatch_size = 64
 
     # process minibatches and evaluate the model
