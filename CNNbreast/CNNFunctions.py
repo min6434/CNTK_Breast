@@ -29,18 +29,20 @@ if 'TEST_DEVICE' in os.environ:
 
 #####################################################################################################################################################
 # Get average pixels of the images
-def saveMean(inputFile):
+def saveMean(inputFile, image_height, image_width, num_channels):
     "Save mean value of the train images"
-    meanImg = np.zeros((3,256,256))
+    meanImg = np.zeros((num_channels,image_width,image_height))
     total = 0
     for i, line in enumerate(open(inputFile, 'r')):
         imgFile, label = line.split('\t')
         img = imread(imgFile)
         
-        if img.shape[0] != 256 or img.shape[1] != 256:
-            img = imresize(img, (256, 256))
+        if img.shape[0] != image_width or img.shape[1] != image_height:
+            img = imresize(img, (image_width, image_height))
         
         img = np.swapaxes(img,0,2)
+        img = np.swapaxes(img,1,2)
+        img = img[..., ::-1]
         meanImg += img
         
     meanImg = np.divide(meanImg, i+1)
@@ -71,7 +73,7 @@ def saveMeanXML(fname, data, imgSize):
 
 #####################################################################################################################################################
 # Change cvedia format map file into the CNTK format map file
-def changeCvediaToCNTKmap(inputFile, outputFile, dataPath):
+def changeCvediaToCNTKmap(inputFile, outputFile):
     NumSamples = 0
     "Change cvedia format map file into the CNTK format map file"
     with open(outputFile, 'w') as CNTKFile: 
@@ -83,6 +85,17 @@ def changeCvediaToCNTKmap(inputFile, outputFile, dataPath):
             CNTKFile.write(line)
     return NumSamples
 
+
+import random
+#####################################################################################################################################################
+# Mix label data randomly
+def MixCNTKmap(inputFile, outputFile):
+    with open(inputFile,'r') as source:
+        data = [ (random.random(), line) for line in source ]
+    data.sort()
+    with open(outputFile,'w') as target:
+        for _, line in data:
+            target.write( line )
 
 #####################################################################################################################################################
 # Define the reader for both training and evaluation action.
@@ -147,11 +160,13 @@ def create_basic_model_with_batch_normalization(input, out_dims):
 
     with default_options(activation=relu):
         model = Sequential([
-            For(range(3), lambda i: [
-                Convolution((7,7), [32,32,64][i], init=glorot_uniform(), pad=True),
+            For(range(4), lambda i: [
+                Convolution((5,5), [16,32,32,64][i], init=glorot_uniform(), pad=True),
                 BatchNormalization(map_rank=1),
                 MaxPooling((3,3), strides=(2,2))
             ]),
+            Dense(64, init=glorot_uniform()),
+            BatchNormalization(map_rank=1),
             Dense(64, init=glorot_uniform()),
             BatchNormalization(map_rank=1),
             Dense(out_dims, init=glorot_uniform(), activation=None)
@@ -253,7 +268,7 @@ def train_and_evaluate(reader_train, reader_test, image_width, image_height, num
 
     # training config
     epoch_size     =  num_train
-    minibatch_size = 64
+    minibatch_size = 128
 
     # Set training parameters
     lr_per_minibatch       = learning_rate_schedule([0.01]*10 + [0.003]*10 + [0.001], UnitType.minibatch, epoch_size)
@@ -298,7 +313,7 @@ def train_and_evaluate(reader_train, reader_test, image_width, image_height, num
     # Evaluation action
     #
     epoch_size     = num_test
-    minibatch_size = 64
+    minibatch_size = 16
 
     # process minibatches and evaluate the model
     metric_numer    = 0
@@ -325,7 +340,7 @@ def train_and_evaluate(reader_train, reader_test, image_width, image_height, num
     print("")
     
     # Visualize training result:
-    window_width            = 16
+    window_width            = 32
     loss_cumsum             = np.cumsum(np.insert(plot_data['loss'], 0, 0)) 
     error_cumsum            = np.cumsum(np.insert(plot_data['error'], 0, 0)) 
 
@@ -362,7 +377,11 @@ def eval(pred_op, image_path, image_mean):
         image_data = imresize(image_data, (256, 256))
     
     image_data = image_data.astype(dtype = np.float32)
-    image_data   = np.ascontiguousarray(np.transpose(image_data, (2, 0, 1)))
+    #image_data = np.ascontiguousarray(np.transpose(image_data, (2, 0, 1)))
+    image_data = np.swapaxes(image_data,0,2)
+    image_data = np.ascontiguousarray(np.swapaxes(image_data,1,2))
+    image_data = image_data[..., ::-1]
+
     image_data  -= image_mean
     result       = np.squeeze(pred_op.eval({pred_op.arguments[0]:[image_data]}))
     

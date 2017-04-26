@@ -19,17 +19,25 @@ DataPath = os.path.join(DataPath,'data')
 #DataPath = os.path.join(DataPath,Job_ID)
 
 # Change map text files into the CNTK format
-print("converting cvedia map to cntk map...")
-nTrain = changeCvediaToCNTKmap(os.path.join(DataPath,'train.txt'), os.path.join(DataPath,'train_total_cntk.txt'), DataPath)
-nTest = changeCvediaToCNTKmap(os.path.join(DataPath,'test.txt'), os.path.join(DataPath,'test_total_cntk.txt'), DataPath)
+print("converting cvedia map to cntk map...", end = '')
+nTrain = changeCvediaToCNTKmap(os.path.join(DataPath,'train_total.txt'), os.path.join(DataPath,'train_total_cntk.txt'))
+nTest = changeCvediaToCNTKmap(os.path.join(DataPath,'test_total.txt'), os.path.join(DataPath,'test_total_cntk.txt'))
+print("finished!")
+print("Number of training samples: {}\nNumber of test samples: {}\n".format(nTrain, nTest))
 
 # Calculate average pixel data and put them into the XML for CNTK
-print("calculating an average image...")
-meanImg = saveMean(os.path.join(DataPath,'train_total_cntk.txt'))
+print("calculating an average image...", end = '')
+meanImg = saveMean(os.path.join(DataPath,'train_total_cntk.txt'), image_height, image_width, num_channels)
 saveMeanXML(os.path.join(DataPath,'breast_mean.xml'), meanImg, ImagSize)
+print("finished!")
+
+# Mix map data
+print("Mixing the training data...", end = '')
+MixCNTKmap(os.path.join(DataPath,'train_total_cntk.txt'), os.path.join(DataPath,'train_total_cntk_mixed.txt'))
+print("finished!")
 
 # Create image readers
-reader_train = create_reader(os.path.join(DataPath,'train_total_cntk.txt'), os.path.join(DataPath,'breast_mean.xml'), image_width, image_height, num_channels, num_classes, True)
+reader_train = create_reader(os.path.join(DataPath,'train_total_cntk_mixed.txt'), os.path.join(DataPath,'breast_mean.xml'), image_width, image_height, num_channels, num_classes, True)
 reader_test  = create_reader(os.path.join(DataPath,'test_total_cntk.txt'), os.path.join(DataPath,'breast_mean.xml'), image_width, image_height, num_channels, num_classes, False)
 
 pred_basic_model_bn = train_and_evaluate(reader_train, reader_test, image_width, image_height, num_channels, num_classes,\
@@ -38,7 +46,7 @@ pred_basic_model_bn = train_and_evaluate(reader_train, reader_test, image_width,
 label_lookup = ["healty tissue", "metastases"]
 nTotal = 0
 nFalse = 0
-for i, line in enumerate(open(os.path.join(DataPath,'test_total_cntk.txt'), 'r')):
+for line in open(os.path.join(DataPath,'test_total_cntk.txt'), 'r'):
     imgFile, label = line.split('\t')
     result = eval(pred_basic_model_bn, imgFile, meanImg)
     nTotal += 1
@@ -47,4 +55,4 @@ for i, line in enumerate(open(os.path.join(DataPath,'test_total_cntk.txt'), 'r')
         print("network result: ", label_lookup[result])
         nFalse += 1
 
-print(nFalse/nTotal*100)
+print( "Accuracy {}%".format( (nTotal-nFalse)/nTotal*100 ) )  
