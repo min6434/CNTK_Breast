@@ -78,17 +78,23 @@ def changeCvediaToCNTKmap(inputFile, outputFile):
     "Change cvedia format map file into the CNTK format map file"
     with open(outputFile, 'w') as CNTKFile: 
         for line in open(inputFile, 'r'):
-            NumSamples += 1
             line = line.replace(' ', '\t') # CNTK paser column using tab
             line = line.replace('/', '\\') # linux path uses / and winows uses 
             line = line.replace('.\\', '.\\..\\..\\data\\')
-            CNTKFile.write(line)
+
+            imgFile, label = line.split('\t')
+            img = imread(imgFile)
+        
+            if img.shape[0] == 256 and img.shape[1] == 256:
+                CNTKFile.write(line)
+                NumSamples += 1
+
     return NumSamples
 
 
-import random
 #####################################################################################################################################################
 # Mix label data randomly
+import random
 def MixCNTKmap(inputFile, outputFile):
     with open(inputFile,'r') as source:
         data = [ (random.random(), line) for line in source ]
@@ -122,6 +128,7 @@ def create_reader(map_file, mean_file, image_width, image_height, num_channels, 
 
 
 #####################################################################################################################################################
+# basic convolutional network
 def create_basic_model_terse(input, out_dims):
 
     with default_options(activation=relu):
@@ -178,7 +185,6 @@ def create_basic_model_with_batch_normalization(input, out_dims):
 
 
 from cntk.ops import combine, times, element_times, AVG_POOLING
-
 
 #####################################################################################################################################################
 
