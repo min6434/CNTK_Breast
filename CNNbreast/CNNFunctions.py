@@ -1,6 +1,7 @@
 ﻿# Functions for breast cancer classification using CNN
 import matplotlib.pyplot as plt
 import numpy as np
+import cv2 as cv
 import os
 
 from scipy.misc import imread, imresize
@@ -29,23 +30,24 @@ if 'TEST_DEVICE' in os.environ:
 
 #####################################################################################################################################################
 # Get average pixels of the images
-def saveMean(inputFile, image_height, image_width, num_channels):
+def saveMean(inputFile, image_height, image_width, num_channels, num_samples):
     "Save mean value of the train images"
-    meanImg = np.zeros((num_channels,image_width,image_height))
-    total = 0
-    for i, line in enumerate(open(inputFile, 'r')):
+    meanImg = np.zeros((num_channels,image_height,image_width), dtype = np.float32)
+    
+    for line in open(inputFile, 'r'):
         imgFile, label = line.split('\t')
         img = imread(imgFile)
-        
         if img.shape[0] != image_width or img.shape[1] != image_height:
             img = imresize(img, (image_width, image_height))
+
+        img = np.array(img, dtype = np.float32)
+        img = np.transpose(img, (2, 0, 1))
+        #img = np.swapaxes(img,0,2)
         
-        img = np.swapaxes(img,0,2)
-        img = np.swapaxes(img,1,2)
-        img = img[..., ::-1]
         meanImg += img
         
-    meanImg = np.divide(meanImg, i+1)
+    meanImg = np.divide(meanImg, num_samples)
+
     return meanImg
 
 
@@ -75,6 +77,9 @@ def saveMeanXML(fname, data, imgSize):
 # Change cvedia format map file into the CNTK format map file
 def changeCvediaToCNTKmap(inputFile, outputFile):
     NumSamples = 0
+    NumHealthy = 0
+    NumTumor = 0
+
     "Change cvedia format map file into the CNTK format map file"
     with open(outputFile, 'w') as CNTKFile: 
         for line in open(inputFile, 'r'):
@@ -84,11 +89,14 @@ def changeCvediaToCNTKmap(inputFile, outputFile):
 
             imgFile, label = line.split('\t')
             img = imread(imgFile)
-        
+                    
             if img.shape[0] == 256 and img.shape[1] == 256:
                 CNTKFile.write(line)
                 NumSamples += 1
+                if int(label) == 0 : NumHealthy += 1
+                else: NumTumor += 1
 
+    print("\nHealty tissue: {} Tumor tissue: {}".format(NumHealthy, NumTumor))
     return NumSamples
 
 
@@ -96,6 +104,7 @@ def changeCvediaToCNTKmap(inputFile, outputFile):
 # Mix label data randomly
 import random
 def MixCNTKmap(inputFile, outputFile):
+    "Mix lines in the cntk map randomly"
     with open(inputFile,'r') as source:
         data = [ (random.random(), line) for line in source ]
     data.sort()
@@ -109,16 +118,15 @@ def create_reader(map_file, mean_file, image_width, image_height, num_channels, 
     "Image reader creation for the learner"
     if not os.path.exists(map_file) or not os.path.exists(mean_file):
         raise RuntimeError("This tutorials depends 201A tutorials, please run 201A first.")
-
     # transformation pipeline for the features has jitter/crop only when training
     transforms = []
-   # if train:
-   #     transforms += [
-   #         xforms.crop(crop_type='randomside', side_ratio=0.8) # train uses data augmentation (translation only)
-   #     ]
+    if train:
+        transforms += [
+            xforms.crop(crop_type='randomside', side_ratio=0.8) # train uses data augmentation (translation only)
+        ]
     transforms += [
-        xforms.scale(width=image_width, height=image_height, channels=num_channels, interpolations='linear'),
-        xforms.mean(mean_file)
+        xforms.scale(width=image_width, height=image_height, channels=num_channels, interpolations='linear')#,
+        #xforms.mean(mean_file)
     ]
     # deserializer
     return MinibatchSource(ImageDeserializer(map_file, StreamDefs(
@@ -130,7 +138,7 @@ def create_reader(map_file, mean_file, image_width, image_height, num_channels, 
 #####################################################################################################################################################
 # basic convolutional network
 def create_basic_model_terse(input, out_dims):
-
+    ""
     with default_options(activation=relu):
         model = Sequential([
             For(range(3), lambda i: [
@@ -147,7 +155,7 @@ def create_basic_model_terse(input, out_dims):
 
 #####################################################################################################################################################
 def create_basic_model_with_dropout(input, out_dims):
-
+    ""
     with default_options(activation=relu):
         model = Sequential([
             For(range(3), lambda i: [
@@ -164,7 +172,7 @@ def create_basic_model_with_dropout(input, out_dims):
 
 #####################################################################################################################################################
 def create_basic_model_with_batch_normalization(input, out_dims):
-
+    ""
     with default_options(activation=relu):
         model = Sequential([
             For(range(4), lambda i: [
@@ -172,8 +180,6 @@ def create_basic_model_with_batch_normalization(input, out_dims):
                 BatchNormalization(map_rank=1),
                 MaxPooling((3,3), strides=(2,2))
             ]),
-            Dense(64, init=glorot_uniform()),
-            BatchNormalization(map_rank=1),
             Dense(64, init=glorot_uniform()),
             BatchNormalization(map_rank=1),
             Dense(out_dims, init=glorot_uniform(), activation=None)
@@ -189,6 +195,7 @@ from cntk.ops import combine, times, element_times, AVG_POOLING
 #####################################################################################################################################################
 
 def convolution_bn(input, filter_size, num_filters, strides=(1,1), init=he_normal(), activation=relu):
+    ""
     if activation is None:
         activation = lambda x: x
         
@@ -277,7 +284,7 @@ def train_and_evaluate(reader_train, reader_test, image_width, image_height, num
     minibatch_size = 128
 
     # Set training parameters
-    lr_per_minibatch       = learning_rate_schedule([0.01]*10 + [0.003]*10 + [0.001], UnitType.minibatch, epoch_size)
+    lr_per_minibatch       = learning_rate_schedule([0.02]*10 + [0.003]*10 + [0.001], UnitType.minibatch, epoch_size)
     momentum_time_constant = momentum_as_time_constant_schedule(-minibatch_size/np.log(0.9))
     l2_reg_weight          = 0.001
     
@@ -332,15 +339,15 @@ def train_and_evaluate(reader_train, reader_test, image_width, image_height, num
 
         # Fetch next test min batch.
         data = reader_test.next_minibatch(current_minibatch, input_map=input_map)
-
+        
         # minibatch data to be trained with
         metric_numer += trainer.test_minibatch(data) * current_minibatch
         metric_denom += current_minibatch
-
+        
         # Keep track of the number of samples processed so far.
         sample_count += data[label_var].num_samples
         minibatch_index += 1
-
+        
     print("")
     print("Final Results: Minibatch[1-{}]: errs = {:0.1f}% * {}".format(minibatch_index+1, (metric_numer*100.0)/metric_denom, metric_denom))
     print("")
@@ -377,19 +384,21 @@ import PIL
 #####################################################################################################################################################
 def eval(pred_op, image_path, image_mean):
     label_lookup = ["healty tissue", "metastases"]
-    image_data   = np.array(PIL.Image.open(image_path), dtype=np.float32)
+    image_data = cv.imread(image_path)
+    image_data = np.array(image_data, dtype=np.float32)
     
     if image_data.shape[0] != 256 or image_data.shape[1] != 256:
-        image_data = imresize(image_data, (256, 256))
+        image_data = cv.resize(image_data, (256, 256))
     
     image_data = image_data.astype(dtype = np.float32)
-    #image_data = np.ascontiguousarray(np.transpose(image_data, (2, 0, 1)))
-    image_data = np.swapaxes(image_data,0,2)
-    image_data = np.ascontiguousarray(np.swapaxes(image_data,1,2))
-    image_data = image_data[..., ::-1]
+    
+    image_data = np.transpose(image_data, (2, 0, 1))
+    #image_data = np.swapaxes(image_data,0,2)
+    #image_data = np.swapaxes(image_data,1,2)
+    #image_data -= image_mean[:,:,::-1]#cv.cvtColor(image_mean, cv.COLOR_RGB2BGR)
 
-    image_data  -= image_mean
-    result       = np.squeeze(pred_op.eval({pred_op.arguments[0]:[image_data]}))
+    image_data = np.ascontiguousarray(image_data, dtype = np.float32)
+    result = np.squeeze(pred_op.eval({pred_op.arguments[0]:[image_data]}))
     
     # Return top 3 results:
     top_count = 2
