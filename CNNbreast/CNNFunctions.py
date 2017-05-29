@@ -12,12 +12,15 @@ import xml.dom.minidom
 import cntk as C
 from cntk.layers import default_options, Convolution, MaxPooling, AveragePooling, Dropout, BatchNormalization, Dense, Sequential, For
 from cntk.io import MinibatchSource, ImageDeserializer, StreamDef, StreamDefs
-import cntk.io.transforms as xforms 
+import cntk.io.transforms as xforms
 from cntk.initializer import glorot_uniform, he_normal
 from cntk import Trainer
 from cntk.learners import momentum_sgd, learning_rate_schedule, UnitType, momentum_as_time_constant_schedule
-from cntk import cross_entropy_with_softmax, classification_error, relu, input, softmax, element_times
+from cntk import cross_entropy_with_softmax, classification_error, relu, input, softmax, element_times, reduce_mean
 from cntk.logging import *
+
+from cntk.debugging import set_computation_network_trace_level
+from cntk.debugging import *
 
 # Use CPU in test environment.
 if 'TEST_DEVICE' in os.environ:
@@ -28,33 +31,30 @@ if 'TEST_DEVICE' in os.environ:
         C.device.set_default_device(C.device.gpu(0))
         print('GPU!')
 
-#####################################################################################################################################################
-# Get average pixels of the images
 def saveMean(inputFile, image_height, image_width, num_channels, num_samples):
     "Save mean value of the train images"
-    meanImg = np.zeros((num_channels,image_height,image_width), dtype = np.float32)
-    
+    meanImg = np.zeros((num_channels, image_height, image_width), dtype=np.float32)
+
     for line in open(inputFile, 'r'):
         imgFile, label = line.split('\t')
         img = imread(imgFile)
         if img.shape[0] != image_width or img.shape[1] != image_height:
             img = imresize(img, (image_width, image_height))
 
-        img = np.array(img, dtype = np.float32)
+        img = np.array(img, dtype=np.float32)
         img = np.transpose(img, (2, 0, 1))
         #img = np.swapaxes(img,0,2)
-        
+
         meanImg += img
-        
+
     meanImg = np.divide(meanImg, num_samples)
 
     return meanImg
 
 
-#####################################################################################################################################################
 # Create mean XML for CNTK
 def saveMeanXML(fname, data, imgSize):
-    "Create a XML flie of the mean image data for CNTK format" 
+    "Create a XML flie of the mean image data for CNTK format"
     root = et.Element('opencv_storage')
     et.SubElement(root, 'Channel').text = '3'
     et.SubElement(root, 'Row').text = str(imgSize)
@@ -70,10 +70,9 @@ def saveMeanXML(fname, data, imgSize):
     tree.write(fname)
     x = xml.dom.minidom.parse(fname)
     with open(fname, 'w') as f:
-        f.write(x.toprettyxml(indent = '  '))
+        f.write(x.toprettyxml(indent='  '))
 
 
-#####################################################################################################################################################
 # Change cvedia format map file into the CNTK format map file
 def changeCvediaToCNTKmap(inputFile, outputFile):
     NumSamples = 0
@@ -81,38 +80,36 @@ def changeCvediaToCNTKmap(inputFile, outputFile):
     NumTumor = 0
 
     "Change cvedia format map file into the CNTK format map file"
-    with open(outputFile, 'w') as CNTKFile: 
+    with open(outputFile, 'w') as CNTKFile:
         for line in open(inputFile, 'r'):
             line = line.replace(' ', '\t') # CNTK paser column using tab
-            line = line.replace('/', '\\') # linux path uses / and winows uses 
+            line = line.replace('/', '\\') # linux path uses / and winows uses
             line = line.replace('.\\', '.\\..\\..\\data\\')
 
             imgFile, label = line.split('\t')
             img = imread(imgFile)
-                    
+
             if img.shape[0] == 256 and img.shape[1] == 256:
                 CNTKFile.write(line)
                 NumSamples += 1
-                if int(label) == 0 : NumHealthy += 1
+                if int(label) == 0: NumHealthy += 1
                 else: NumTumor += 1
 
     print("\nHealty tissue: {} Tumor tissue: {}".format(NumHealthy, NumTumor))
     return NumSamples
 
 
-#####################################################################################################################################################
 # Mix label data randomly
 import random
 def MixCNTKmap(inputFile, outputFile):
     "Mix lines in the cntk map randomly"
-    with open(inputFile,'r') as source:
-        data = [ (random.random(), line) for line in source ]
+    with open(inputFile, 'r') as source:
+        data = [(random.random(), line) for line in source]
     data.sort()
-    with open(outputFile,'w') as target:
+    with open(outputFile, 'w') as target:
         for _, line in data:
-            target.write( line )
+            target.write(line)
 
-#####################################################################################################################################################
 # Define the reader for both training and evaluation action.
 def create_reader(map_file, mean_file, image_width, image_height, num_channels, num_classes, train):
     "Image reader creation for the learner"
@@ -130,21 +127,20 @@ def create_reader(map_file, mean_file, image_width, image_height, num_channels, 
     ]
     # deserializer
     return MinibatchSource(ImageDeserializer(map_file, StreamDefs(
-        features = StreamDef(field='image', transforms=transforms), # first column in map file is referred to as 'image'
-        labels   = StreamDef(field='label', shape=num_classes)      # and second as 'label'
+        features=StreamDef(field='image', transforms=transforms), # first column in map file is referred to as 'image'
+        labels=StreamDef(field='label', shape=num_classes)      # and second as 'label'
     )))
 
 
-#####################################################################################################################################################
 # basic convolutional network
 def create_basic_model_terse(input, out_dims):
     ""
     with default_options(activation=relu):
         model = Sequential([
             For(range(3), lambda i: [
-                Convolution((3,3), [16,32,64][i], init=glorot_uniform(), pad=True),
-                Convolution((3,3), [16,32,64][i], init=glorot_uniform(), pad=True),
-                MaxPooling((3,3), strides=(2,2))
+                Convolution((3, 3), [16, 32, 64][i], init=glorot_uniform(), pad=True),
+                Convolution((3, 3), [16, 32, 64][i], init=glorot_uniform(), pad=True),
+                MaxPooling((3, 3), strides=(2, 2))
             ]),
             Dense(64, init=glorot_uniform()),
             Dense(out_dims, init=glorot_uniform(), activation=None)
@@ -153,14 +149,13 @@ def create_basic_model_terse(input, out_dims):
     return model(input)
 
 
-#####################################################################################################################################################
 def create_basic_model_with_dropout(input, out_dims):
     ""
     with default_options(activation=relu):
         model = Sequential([
             For(range(3), lambda i: [
-                Convolution((5,5), [32,32,64][i], init=glorot_uniform(), pad=True),
-                MaxPooling((3,3), strides=(2,2))
+                Convolution((5, 5), [32, 32, 64][i], init=glorot_uniform(), pad=True),
+                MaxPooling((3, 3), strides=(2, 2))
             ]),
             Dense(64, init=glorot_uniform()),
             Dropout(0.25),
@@ -170,15 +165,14 @@ def create_basic_model_with_dropout(input, out_dims):
     return model(input)
 
 
-#####################################################################################################################################################
 def create_basic_model_with_batch_normalization(input, out_dims):
     ""
     with default_options(activation=relu):
         model = Sequential([
             For(range(4), lambda i: [
-                Convolution((5,5), [16,32,32,64][i], init=glorot_uniform(), pad=True),
+                Convolution((5, 5), [16, 32, 32, 64][i], init=glorot_uniform(), pad=True),
                 BatchNormalization(map_rank=1),
-                MaxPooling((3,3), strides=(2,2))
+                MaxPooling((3, 3), strides=(2, 2))
             ]),
             Dense(64, init=glorot_uniform()),
             BatchNormalization(map_rank=1),
@@ -192,53 +186,48 @@ def create_basic_model_with_batch_normalization(input, out_dims):
 
 from cntk.ops import combine, times, element_times, AVG_POOLING
 
-#####################################################################################################################################################
 
-def convolution_bn(input, filter_size, num_filters, strides=(1,1), init=he_normal(), activation=relu):
+def convolution_bn(input, filter_size, num_filters, strides=(1, 1), init=he_normal(), activation=relu):
     ""
     if activation is None:
         activation = lambda x: x
-        
+
     r = Convolution(filter_size, num_filters, strides=strides, init=init, activation=None, pad=True, bias=False)(input)
     r = BatchNormalization(map_rank=1)(r)
     r = activation(r)
-    
+
     return r
 
 
-#####################################################################################################################################################
 
 def resnet_basic(input, num_filters):
-    c1 = convolution_bn(input, (3,3), num_filters)
-    c2 = convolution_bn(c1, (3,3), num_filters, activation=None)
-    p  = c2 + input
+    c1 = convolution_bn(input, (3, 3), num_filters)
+    c2 = convolution_bn(c1, (3, 3), num_filters, activation=None)
+    p = c2 + input
     return relu(p)
 
 
-#####################################################################################################################################################
 
 def resnet_basic_inc(input, num_filters):
-    c1 = convolution_bn(input, (3,3), num_filters, strides=(2,2))
-    c2 = convolution_bn(c1, (3,3), num_filters, activation=None)
+    c1 = convolution_bn(input, (3, 3), num_filters, strides=(2, 2))
+    c2 = convolution_bn(c1, (3, 3), num_filters, activation=None)
 
-    s = convolution_bn(input, (1,1), num_filters, strides=(2,2), activation=None)
-    
+    s = convolution_bn(input, (1, 1), num_filters, strides=(2, 2), activation=None)
+
     p = c2 + s
     return relu(p)
 
 
-#####################################################################################################################################################
 
 def resnet_basic_stack(input, num_filters, num_stack):
-    assert (num_stack > 0)
-    
+    assert (num_stack>0)
+
     r = input
     for _ in range(num_stack):
         r = resnet_basic(r, num_filters)
     return r
 
 
-#####################################################################################################################################################
 
 def create_resnet_model(input, out_dims):
     conv = convolution_bn(input, (3,3), 16)
@@ -258,8 +247,10 @@ def create_resnet_model(input, out_dims):
     
     return net
 
-#####################################################################################################################################################
 def train_and_evaluate(reader_train, reader_test, image_width, image_height, num_channels, num_classes, num_train, num_test, max_epochs, model_func):
+   
+    set_computation_network_trace_level(0)
+    
     # Input variables denoting the features and label data
     input_var = C.input((num_channels, image_height, image_width))
     label_var = C.input((num_classes))
@@ -293,7 +284,16 @@ def train_and_evaluate(reader_train, reader_test, image_width, image_height, num
                            lr = lr_per_minibatch, momentum = momentum_time_constant, 
                            l2_regularization_weight=l2_reg_weight)
     progress_printer = ProgressPrinter(tag='Training', num_epochs=max_epochs)
-    trainer = Trainer(z, (ce, pe), [learner], [progress_printer])
+
+    # progress writers
+    progress_writers = ProgressPrinter(tag='Training', num_epochs=max_epochs)
+    tensorboard_logdir= 'log'
+    tensorboard_writer = None
+    if tensorboard_logdir is not None:
+        tensorboard_writer = TensorBoardProgressWriter(freq=10, log_dir=tensorboard_logdir, model=z)
+        progress_writers.append(tensorboard_writer)
+   
+    trainer = Trainer(z, (ce, pe), [learner], [tensorboard_writer])
 
     # define mapping from reader streams to network inputs
     input_map = {
@@ -302,6 +302,11 @@ def train_and_evaluate(reader_train, reader_test, image_width, image_height, num
     }
 
     log_number_of_parameters(z) ; print()
+
+    # perform model training
+    profiler_dir = 'profiler'
+    if profiler_dir:
+        start_profiler(profiler_dir, True)
 
     # perform model training
     batch_index = 0
@@ -321,6 +326,19 @@ def train_and_evaluate(reader_train, reader_test, image_width, image_height, num
             
             batch_index += 1
         trainer.summarize_training_progress()
+
+        # Log mean of each parameter tensor, so that we can confirm that the parameters change indeed.
+        if tensorboard_writer:
+            for parameter in z.parameters:
+                tensorboard_writer.write_value(parameter.uid + "/mean", reduce_mean(parameter).eval(), epoch)
+
+        model_dir = ''
+        if model_dir:
+            z.save(os.path.join(model_dir, network_name + "_{}.dnn".format(epoch)))
+        enable_profiler() # begin to collect profiler data after first epoch
+
+    if profiler_dir:
+        stop_profiler()
         
     #
     # Evaluation action
@@ -381,7 +399,6 @@ def train_and_evaluate(reader_train, reader_test, image_width, image_height, num
 
 
 import PIL
-#####################################################################################################################################################
 def eval(pred_op, image_path, image_mean):
     label_lookup = ["healty tissue", "metastases"]
     image_data = cv.imread(image_path)

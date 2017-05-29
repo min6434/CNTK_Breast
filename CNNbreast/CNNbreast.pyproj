@@ -12,7 +12,7 @@
     <OutputPath>.</OutputPath>
     <Name>CNNbreast</Name>
     <RootNamespace>CNNbreast</RootNamespace>
-    <InterpreterId>{41d7cb4b-fb42-4130-9b55-4697040cc3ea}</InterpreterId>
+    <InterpreterId>{057d6a78-fa38-4baa-a151-f56e5f7dd070}</InterpreterId>
     <InterpreterVersion>3.5</InterpreterVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
@@ -30,7 +30,7 @@
     </Compile>
   </ItemGroup>
   <ItemGroup>
-    <InterpreterReference Include="{41d7cb4b-fb42-4130-9b55-4697040cc3ea}\3.5" />
+    <InterpreterReference Include="{057d6a78-fa38-4baa-a151-f56e5f7dd070}\3.5" />
   </ItemGroup>
   <PropertyGroup>
     <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">10.0</VisualStudioVersion>

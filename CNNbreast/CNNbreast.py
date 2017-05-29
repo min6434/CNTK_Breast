@@ -12,6 +12,8 @@ image_width  = ImagSize
 num_channels = 3
 num_classes  = 2
 
+dir_path = os.path.dirname(os.path.realpath(__file__))
+os.chdir(dir_path)
 DataPath = os.getcwd()
 for i in range(2):
     DataPath = os.path.abspath(os.path.join(DataPath, os.pardir))
