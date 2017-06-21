@@ -1,4 +1,4 @@
-﻿# Functions for breast cancer classification using CNN
+﻿"""Functions for breast cancer classification using CNN""" 
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2 as cv
@@ -291,9 +291,9 @@ def train_and_evaluate(reader_train, reader_test, image_width, image_height, num
     tensorboard_writer = None
     if tensorboard_logdir is not None:
         tensorboard_writer = TensorBoardProgressWriter(freq=10, log_dir=tensorboard_logdir, model=z)
-        progress_writers.append(tensorboard_writer)
+        #progress_writers.append(tensorboard_writer)
    
-    trainer = Trainer(z, (ce, pe), [learner], [tensorboard_writer])
+    trainer = Trainer(z, (ce, pe), [learner], [progress_writers, tensorboard_writer])
 
     # define mapping from reader streams to network inputs
     input_map = {
@@ -326,7 +326,7 @@ def train_and_evaluate(reader_train, reader_test, image_width, image_height, num
             
             batch_index += 1
         trainer.summarize_training_progress()
-
+        
         # Log mean of each parameter tensor, so that we can confirm that the parameters change indeed.
         if tensorboard_writer:
             for parameter in z.parameters:
@@ -365,21 +365,22 @@ def train_and_evaluate(reader_train, reader_test, image_width, image_height, num
         # Keep track of the number of samples processed so far.
         sample_count += data[label_var].num_samples
         minibatch_index += 1
-        
+
     print("")
-    print("Final Results: Minibatch[1-{}]: errs = {:0.1f}% * {}".format(minibatch_index+1, (metric_numer*100.0)/metric_denom, metric_denom))
+    print("Final Results: Minibatch[1-{}]: errs = {:0.1f}% * {}"
+          .format(minibatch_index+1, (metric_numer*100.0)/metric_denom, metric_denom))
     print("")
-    
+
     # Visualize training result:
-    window_width            = 32
-    loss_cumsum             = np.cumsum(np.insert(plot_data['loss'], 0, 0)) 
-    error_cumsum            = np.cumsum(np.insert(plot_data['error'], 0, 0)) 
+    window_width = 32
+    loss_cumsum = np.cumsum(np.insert(plot_data['loss'], 0, 0))
+    error_cumsum = np.cumsum(np.insert(plot_data['error'], 0, 0))
 
     # Moving average.
     plot_data['batchindex'] = np.insert(plot_data['batchindex'], 0, 0)[window_width:]
-    plot_data['avg_loss']   = (loss_cumsum[window_width:] - loss_cumsum[:-window_width]) / window_width
-    plot_data['avg_error']  = (error_cumsum[window_width:] - error_cumsum[:-window_width]) / window_width
-    
+    plot_data['avg_loss'] = (loss_cumsum[window_width:] - loss_cumsum[:-window_width]) / window_width
+    plot_data['avg_error'] = (error_cumsum[window_width:] - error_cumsum[:-window_width]) / window_width
+
     plt.figure(1)
     plt.subplot(211)
     plt.plot(plot_data["batchindex"], plot_data["avg_loss"], 'b--')
@@ -403,20 +404,20 @@ def eval(pred_op, image_path, image_mean):
     label_lookup = ["healty tissue", "metastases"]
     image_data = cv.imread(image_path)
     image_data = np.array(image_data, dtype=np.float32)
-    
+
     if image_data.shape[0] != 256 or image_data.shape[1] != 256:
         image_data = cv.resize(image_data, (256, 256))
-    
-    image_data = image_data.astype(dtype = np.float32)
-    
+
+    image_data = image_data.astype(dtype=np.float32)
+
     image_data = np.transpose(image_data, (2, 0, 1))
     #image_data = np.swapaxes(image_data,0,2)
     #image_data = np.swapaxes(image_data,1,2)
     #image_data -= image_mean[:,:,::-1]#cv.cvtColor(image_mean, cv.COLOR_RGB2BGR)
 
-    image_data = np.ascontiguousarray(image_data, dtype = np.float32)
+    image_data = np.ascontiguousarray(image_data, dtype=np.float32)
     result = np.squeeze(pred_op.eval({pred_op.arguments[0]:[image_data]}))
-    
+
     # Return top 3 results:
     top_count = 2
     result_indices = (-np.array(result)).argsort()[:top_count]
@@ -424,5 +425,5 @@ def eval(pred_op, image_path, image_mean):
     #print("Top 2 predictions:")
     #for i in range(top_count):
     #    print("\tLabel: {:10s}, confidence: {:.2f}%".format(label_lookup[result_indices[i]], result[result_indices[i]] * 100))
-    
+
     return result_indices[0]

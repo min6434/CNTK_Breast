@@ -28,6 +28,7 @@
     <Compile Include="CNNFunctions.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="colordeconv.py" />
   </ItemGroup>
   <ItemGroup>
     <InterpreterReference Include="{057d6a78-fa38-4baa-a151-f56e5f7dd070}\3.5" />
